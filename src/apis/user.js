@@ -10,7 +10,7 @@ export function loginApi(formData) {
 }
 
 // 获取用户信息
-export function getProfileApi(formData) {
+export function getProfileApi() {
   return request({
     url: "/user/profile",
     method: "GET",

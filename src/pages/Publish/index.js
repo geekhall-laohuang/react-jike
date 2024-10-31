@@ -15,23 +15,23 @@ import "./index.scss";
 
 import ReactQuill from "react-quill";
 import "react-quill/dist/quill.snow.css";
-import { useEffect, useState } from "react";
-import { getChannelApi } from "@/apis/article";
-import { createArticleAPI } from "@/apis/article";
+import { useState } from "react";
+
+import {
+  createArticleAPI,
+  getArticleById,
+  updateArticleAPI,
+} from "@/apis/article";
 import { message } from "antd";
+import { useChannel } from "@/hooks/useChannel";
+import { useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 
 const { Option } = Select;
 
 const Publish = () => {
   // 渲染列表
-  const [channelList, setChannelList] = useState([]);
-  useEffect(() => {
-    const getChannelList = async () => {
-      const res = await getChannelApi();
-      setChannelList(res.data.channels);
-    };
-    getChannelList();
-  }, []);
+  const { channelList } = useChannel();
 
   // 提交表单
   const onFinish = (formValue) => {
@@ -46,12 +46,26 @@ const Publish = () => {
       content,
       cover: {
         type: imageType,
-        Images: imageList.map((item) => item.response.data.url), // 图片列表
+        Images: imageList.map((item) => {
+          if (item.response) {
+            return item.response.data.url;
+          } else {
+            return item.url;
+          }
+        }), // 图片列表
       },
       channel_id,
     };
     // 调用接口
-    createArticleAPI(reqData);
+    // 新增 新增接口  编辑 编辑接口
+    if (articleId) {
+      updateArticleAPI({
+        ...reqData,
+        id: articleId,
+      });
+    } else {
+      createArticleAPI(reqData);
+    }
   };
 
   // 上传回调
@@ -65,16 +79,51 @@ const Publish = () => {
   const onTypeChange = (e) => {
     setImageType(e.target.value);
   };
+
+  // 回填数据
+  const [searchParams] = useSearchParams();
+  const articleId = searchParams.get("id");
+  // 获取实例
+  const [form] = Form.useForm();
+  useEffect(() => {
+    // 1. 通过id获取数据
+    async function getArticleDetail() {
+      const res = await getArticleById(articleId);
+      const data = res.data;
+      const { cover } = data;
+      form.setFieldsValue({
+        ...data,
+        type: cover.type,
+      });
+      // 为什么现在的写法无法回填封面？
+      // 数据结构的问题  set方法 -> { type: 3 }   { cover: { type: 3}}
+
+      // 回填图片列表
+      setImageType(cover.type);
+      // 显示图片({url:url})
+      setImageList(
+        cover.images.map((url) => {
+          return { url };
+        })
+      );
+    }
+    // 只有有id的时候才能调用此函数回填
+    if (articleId) {
+      getArticleDetail();
+    }
+    // 2. 调用实例方法 完成回填
+  }, [articleId, form]);
+
   return (
     <div className="publish">
       <Card
         title={
-          <Breadcrumb separator=">">
-            <Breadcrumb.Item>
-              <Link to="/home">首页</Link>
-            </Breadcrumb.Item>
-            <Breadcrumb.Item>发布文章</Breadcrumb.Item>
-          </Breadcrumb>
+          <Breadcrumb
+            items={[
+              { title: <Link to={"/"}>首页</Link> },
+              { title: `${articleId ? "编辑" : "发布"}文章` },
+            ]}
+          />
         }
       >
         <Form
@@ -82,6 +131,7 @@ const Publish = () => {
           wrapperCol={{ span: 16 }}
           initialValues={{ type: 0 }}
           onFinish={onFinish}
+          form={form}
         >
           <Form.Item
             label="标题"
@@ -122,6 +172,7 @@ const Publish = () => {
                 action="http://geek.itheima.net/v1_0/upload"
                 onChange={onChange}
                 maxCount={imageType}
+                fileList={imageList}
               >
                 <div style={{ marginTop: 8 }}>
                   <PlusOutlined />
